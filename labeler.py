@@ -98,7 +98,7 @@ if __name__ == '__main__':
 
     if len(args) != 4:
         logging.critical("Please add the directory to label and the file to save the labels to")
-        logging.critical("python3 labeller.py /data/minisrc /home/mmesser/readability_labels.csv 100 readable")
+        logging.critical("python3 labeler.py /data/minisrc /home/mmesser/readability_labels.csv 100 readable")
         logging.critical("Use -v to enable logging")
         logging.critical("Not enough arguments to start process")
     else:
