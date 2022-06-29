@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import sys
 import pandas as pd
 
@@ -33,20 +34,30 @@ def get_labels(label_name):
     for i in range(int(number_of_labels)):
         labels.append(input("Enter a label: "))
 
-
-
     logging.info("Valid Labels:" + str(labels))
     return labels
 
 
 def assign_label(labels):
-    label = input("Please label the above file: ")
+    label = input("Please label the above file " + str(labels) + ": ")
 
     if label not in labels:
         logging.critical("Label is not part of the existing label set")
         return assign_label(labels)
 
     return label
+
+
+def get_all_files(dir_to_label):
+    """
+    Creates a list of files to facilitate random sampling
+    Adapted from: https://stackoverflow.com/questions/6411811/randomly-selecting-a-file-from-a-tree-of-directories-in-a-completely-fair-manner
+    :param dir_to_label: The base directory to take the sample from.
+    :return: The list of all files
+    """
+    return [os.path.join(path, filename)
+            for path, _, files in os.walk(dir_to_label)
+            for filename in files if filename.endswith(".java")]
 
 
 def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str) -> None:
@@ -66,23 +77,28 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
         logging.fatal("Output file is not a CSV")
         return
 
-    # Ask user for valid labels
     labels = get_labels(label_name)
+
+    files = get_all_files(dir_to_label)
 
     output_data = pd.DataFrame(columns=['file_name', 'source', label_name])
 
-    for root, _, files in os.walk(dir_to_label):
-        for file in files:
-            if file.endswith(".java"):
-                path = os.path.join(root, file)
-                with open(path) as f:
-                    print(file + "\n")
-                    src = f.read()
-                    print(src + "\n")
+    if sample_size >= len(files):
+        sample_size = len(files)
 
-                label = assign_label(labels)
+    random_files = random.choices(files, k=sample_size)
 
-                output_data = pd.concat([output_data, pd.DataFrame([{'file_name': path, 'source': src, label_name: label}])], ignore_index=True)
+    for file in random_files:
+        with open(file) as f:
+            print(file + "\n")
+            src = f.read()
+            print(src + "\n")
+
+        label = assign_label(labels)
+
+        output_data = pd.concat([output_data,
+                                 pd.DataFrame([{'file_name': file,
+                                                'source': src, label_name: label}])], ignore_index=True)
 
     output_data.to_csv(output_file)
 
