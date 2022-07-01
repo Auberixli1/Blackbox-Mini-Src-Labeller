@@ -3,13 +3,15 @@ import os
 import random
 import sys
 import pandas as pd
+import json
 
 VERSION = 0.1
+DIVIDER = "-".join("-" for i in range(50))
 
 logging.basicConfig(handlers=[
-        logging.FileHandler("debug.log"),
-        logging.StreamHandler()
-    ],
+    logging.FileHandler("debug.log"),
+    logging.StreamHandler()
+],
     level=logging.ERROR,
     format='%(asctime)s - %(message)s')
 
@@ -45,6 +47,7 @@ def assign_label(labels):
         logging.critical("Label is not part of the existing label set")
         return assign_label(labels)
 
+    print(DIVIDER)
     return label
 
 
@@ -55,9 +58,17 @@ def get_all_files(dir_to_label):
     :param dir_to_label: The base directory to take the sample from.
     :return: The list of all files
     """
-    return [os.path.join(path, filename)
-            for path, _, files in os.walk(dir_to_label)
-            for filename in files if filename.endswith(".java")]
+
+    src_files = [os.path.join(path, filename)
+                 for path, _, files in os.walk(dir_to_label)
+                 for filename in files if filename.endswith(".java")]
+    meta_files = [os.path.join(path, filename) for path, _, files in os.walk(dir_to_label)
+                  for filename in files if filename.endswith(".json")]
+
+    src_files.sort()
+    meta_files.sort()
+
+    return zip(src_files, meta_files)
 
 
 def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str) -> None:
@@ -79,9 +90,9 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
 
     labels = get_labels(label_name)
 
-    files = get_all_files(dir_to_label)
+    files = list(get_all_files(dir_to_label))
 
-    output_data = pd.DataFrame(columns=['file_name', 'source', label_name])
+    output_data = pd.DataFrame(columns=['file_name', 'source', 'compile_result', label_name])
 
     if sample_size >= len(files):
         sample_size = len(files)
@@ -89,8 +100,15 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
     random_files = random.choices(files, k=sample_size)
 
     for file in random_files:
-        with open(file) as f:
-            print(file + "\n")
+        print(file[0] + "\n")
+
+        with open(file[1]) as f:
+            # print meta data
+            meta = json.loads(f.read())
+            print(str(meta) + "\n")
+
+        with open(file[0]) as f:
+            # print source
             src = f.read()
             print(src + "\n")
 
@@ -98,7 +116,9 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
 
         output_data = pd.concat([output_data,
                                  pd.DataFrame([{'file_name': file,
-                                                'source': src, label_name: label}])], ignore_index=True)
+                                                'source': src, 'compile_result': meta['compile_result'],
+                                                label_name: label}])],
+                                ignore_index=True)
 
     output_data.to_csv(output_file)
 
