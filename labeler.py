@@ -16,7 +16,7 @@ logging.basicConfig(handlers=[
     format='%(asctime)s - %(message)s')
 
 
-def get_labels(label_name):
+def get_labels(label_name: str) -> list:
     """
     Gets a list of acceptable labels from the user
     :param label_name: The column name that the labels relate to
@@ -40,7 +40,7 @@ def get_labels(label_name):
     return labels
 
 
-def assign_label(labels):
+def assign_label(labels: list) -> str:
     label = input("Please label the above file " + str(labels) + ": ")
 
     if label not in labels:
@@ -51,32 +51,59 @@ def assign_label(labels):
     return label
 
 
-def get_all_files(dir_to_label):
+def get_all_files(dir_to_label: str, desired_size: int, line_threshold: int) -> list:
     """
     Creates a list of files to facilitate random sampling
     Adapted from: https://stackoverflow.com/questions/6411811/randomly-selecting-a-file-from-a-tree-of-directories-in-a-completely-fair-manner
     :param dir_to_label: The base directory to take the sample from.
+    :param desired_size: The total number of lines that need to be in the source file (approximately)
+    :param line_threshold: The +- threshold for the number of lines in a source file
     :return: The list of all files
     """
 
-    src_files = [os.path.join(path, filename)
-                 for path, _, files in os.walk(dir_to_label)
-                 for filename in files if filename.endswith(".java")]
+    src_files = []
+
+    for path, _, files in os.walk(dir_to_label):
+        for filename in files:
+            if filename.endswith(".java"):
+                file_path = os.path.join(path, filename)
+                with open(file_path) as f:
+                    file_length = len(f.readlines())
+                    print(file_path, ":", file_length)
+                    if desired_size - line_threshold <= file_length <= desired_size + line_threshold:
+                        src_files.append(file_path)
+
     meta_files = [os.path.join(path, filename) for path, _, files in os.walk(dir_to_label)
                   for filename in files if filename.endswith(".json")]
 
     src_files.sort()
     meta_files.sort()
 
-    return zip(src_files, meta_files)
+    return list(zip(src_files, meta_files))
 
 
-def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str) -> None:
+def get_desired_file_length(line_threshold: int) -> int:
+    """
+    Asks the user for the desired length of the source file.
+    :param line_threshold: The +- threshold for the number of lines in a source file
+    :return: The desired length as an int
+    """
+    length = input("How long should the sampled files be? +- " + str(line_threshold) + " Lines\n")
+
+    if not length.isdigit():
+        logging.critical("Input is not an positive integer")
+        return get_desired_file_length(line_threshold)
+
+    return int(length)
+
+
+def main(dir_to_label: str, output_file: str, sample_size: int, line_threshold: int, label_name: str) -> None:
     """
     Used for labelling the Blackbox Mini Source Dataset.
     :param dir_to_label: The directory to take a random sample from
     :param output_file: The CSV to write the raw data and labels to for use in ML.
     :param sample_size: The number of random samples to take from the dataset to label
+    :param line_threshold: The +- threshold for the number of lines in a source file
     :param label_name: the label name, used as the column in the CSV file
     :return: None
     """
@@ -90,7 +117,13 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
 
     labels = get_labels(label_name)
 
-    files = list(get_all_files(dir_to_label))
+    file_length = get_desired_file_length(line_threshold)
+
+    files = get_all_files(dir_to_label, file_length, line_threshold)
+
+    if len(files) == 0:
+        logging.fatal("No files found with desired length.")
+        return
 
     output_data = pd.DataFrame(columns=['file_name', 'source', 'compile_result', label_name])
 
@@ -132,13 +165,14 @@ if __name__ == '__main__':
     if "--version" in opts:
         print(VERSION)
 
-    if len(args) != 4:
+    if len(args) != 5:
         logging.critical("Please add the directory to label and the file to save the labels to")
-        logging.critical("python3 labeler.py /data/minisrc /home/mmesser/readability_labels.csv 100 readable")
+        logging.critical("python3 labeler.py /data/minisrc /home/mmesser/readability_labels.csv 100 20 readable")
         logging.critical("Use -v to enable logging")
         logging.critical("Not enough arguments to start process")
     else:
-        if not args[2].isdigit():
+        if not args[2].isdigit() or not args[3].isdigit():
             logging.critical("Sample size is not a positive integer")
-
-        main(dir_to_label=args[0], output_file=args[1], sample_size=int(args[2]), label_name=args[3])
+        else:
+            main(dir_to_label=args[0], output_file=args[1], sample_size=int(args[2]),
+                 line_threshold=int(args[3]), label_name=args[4])
