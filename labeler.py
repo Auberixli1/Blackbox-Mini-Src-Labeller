@@ -4,6 +4,8 @@ import random
 import sys
 import pandas as pd
 import json
+import multiprocessing as mp
+from multiprocessing_logging import install_mp_handler
 
 VERSION = 0.1
 DIVIDER = "-".join("-" for i in range(50))
@@ -13,7 +15,11 @@ logging.basicConfig(handlers=[
     logging.StreamHandler()
 ],
     level=logging.ERROR,
-    format='%(asctime)s - %(message)s')
+    format='%(processName)s - %(asctime)s - %(message)s')
+
+MULTIPROCESS_DIVISOR = 4
+
+install_mp_handler()
 
 
 def get_labels(label_name: str) -> list:
@@ -51,6 +57,32 @@ def assign_label(labels: list) -> str:
     return label
 
 
+def process_src(path: str, filename: str, desired_size: int, line_threshold: int) -> [str, None]:
+    """
+    The java source file to process and check the line length for.
+    :param path: The base path
+    :param filename: The java file name
+    :param desired_size: The desired number of lines
+    :param line_threshold: The threshold to allow for approximate values
+    :return: The source files path if it has the number of lines within the threshold; otherwise None
+    """
+    file_path = os.path.join(path, filename)
+    with open(file_path) as f:
+        file_length = len(f.readlines())
+        logging.debug(file_path + ":" + str(file_length))
+        if desired_size - line_threshold <= file_length <= desired_size + line_threshold:
+            return file_path
+
+
+def process_meta(src_file: str) -> str:
+    """
+    Converts .java extension to the .json extension used in the metadata files.
+    :param src_file: The src file to convert
+    :return: The metadata file
+    """
+    return src_file.replace(".java", ".json")
+
+
 def get_all_files(dir_to_label: str, desired_size: int, line_threshold: int) -> list:
     """
     Creates a list of files to facilitate random sampling
@@ -63,21 +95,20 @@ def get_all_files(dir_to_label: str, desired_size: int, line_threshold: int) -> 
 
     src_files = []
 
+    pool = mp.Pool(mp.cpu_count() // MULTIPROCESS_DIVISOR)
+
     for path, _, files in os.walk(dir_to_label):
-        for filename in files:
-            if filename.endswith(".java"):
-                file_path = os.path.join(path, filename)
-                with open(file_path) as f:
-                    file_length = len(f.readlines())
-                    print(file_path, ":", file_length)
-                    if desired_size - line_threshold <= file_length <= desired_size + line_threshold:
-                        src_files.append(file_path)
+        temp_data = pool.starmap(process_src, [(path, f, desired_size, line_threshold)
+                                           for f in files if f.endswith(".java")])
+        src_files.append(temp_data)
 
-    meta_files = [os.path.join(path, filename) for path, _, files in os.walk(dir_to_label)
-                  for filename in files if filename.endswith(".json")]
-
+    src_files = list(filter(None, [s for src in src_files for s in src]))
     src_files.sort()
+
+    meta_files = pool.map(process_meta, src_files)
     meta_files.sort()
+
+    pool.close()
 
     return list(zip(src_files, meta_files))
 
@@ -162,6 +193,8 @@ if __name__ == '__main__':
 
     if "-v" in opts or "--verbose" in opts:
         logging.getLogger().setLevel(logging.INFO)
+    if "-vv" in opts:
+        logging.getLogger().setLevel(logging.DEBUG)
     if "--version" in opts:
         print(VERSION)
 
