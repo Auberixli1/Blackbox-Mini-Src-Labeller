@@ -96,7 +96,7 @@ def main(dir_to_label: str, file_length: int, line_threshold: int) -> None:
         logging.fatal("No files found with desired length.")
         return
 
-    with open("found_files_" + datetime.now().strftime("%Y-%m-%d_%I:%M_%S") + ".pickle", "wb") as of:
+    with open("found_files_" + datetime.now().isoformat(timespec="seconds") + ".pickle", "wb") as of:
         logging.info("Saving found files... (" + str(len(files)) + ")")
         pickle.dump(files, of)
 

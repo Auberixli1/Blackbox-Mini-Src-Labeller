@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 import random
 import sys
 import pandas as pd
@@ -57,21 +58,22 @@ def assign_label(labels: list) -> str:
     return label
 
 
-def load_files():
-    pass
+def load_files(pickle_file: str) -> list:
+    with open(pickle_file, "rb") as pf:
+        return pickle.load(pf)
 
 
-def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str) -> None:
+def main(pickle_file: str, output_file: str, sample_size: int, label_name: str) -> None:
     """
     Used for labelling the Blackbox Mini Source Dataset.
-    :param dir_to_label: The directory to take a random sample from
+    :param pickle_file: The pickle file to read
     :param output_file: The CSV to write the raw data and labels to for use in ML.
     :param sample_size: The number of random samples to take from the dataset to label
     :param label_name: the label name, used as the column in the CSV file
     :return: None
     """
-    if not os.path.isdir(dir_to_label):
-        logging.fatal("Directory is not valid")
+    if not os.path.exists(pickle_file) and pickle_file.endswith(".pickle"):
+        logging.fatal("Pickle file is not valid")
         return
 
     if not output_file.endswith(".csv"):
@@ -80,7 +82,7 @@ def main(dir_to_label: str, output_file: str, sample_size: int, label_name: str)
 
     labels = get_labels(label_name)
 
-    files = load_files()
+    files = load_files(pickle_file)
 
     output_data = pd.DataFrame(columns=['file_name', 'source', 'compile_result', label_name])
 
@@ -124,7 +126,7 @@ if __name__ == '__main__':
     if "--version" in opts:
         print(VERSION)
 
-    if len(args) != 5:
+    if len(args) != 4:
         logging.critical("Please add the directory to label and the file to save the labels to")
         logging.critical("python3 labeler.py /data/minisrc /home/mmesser/readability_labels.csv 100 readable")
         logging.critical("Use -v to enable logging")
@@ -133,4 +135,4 @@ if __name__ == '__main__':
         if not args[2].isdigit():
             logging.critical("Sample size is not a positive integer")
         else:
-            main(dir_to_label=args[0], output_file=args[1], sample_size=int(args[2]), label_name=args[3])
+            main(pickle_file=args[0], output_file=args[1], sample_size=int(args[2]), label_name=args[3])
