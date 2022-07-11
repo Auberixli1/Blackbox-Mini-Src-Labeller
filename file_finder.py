@@ -32,6 +32,10 @@ def process_src(path: str, filename: str, desired_size: int, line_threshold: int
     :return: The source files path if it has the number of lines within the threshold; otherwise None
     """
     file_path = os.path.join(path, filename)
+    if file_path == "/data/mini/srcml-2019-09/project-17094036/src-83472986.xml":
+        # Don't process extremely large file
+        return
+    
     with open(file_path) as f:
         file_length = len(f.readlines())
         logging.debug(file_path + ":" + str(file_length))
