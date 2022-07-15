@@ -22,37 +22,32 @@ MULTIPROCESS_DIVISOR = 4
 install_mp_handler()
 
 
-def process_src(path: str, filename: str, desired_size: int, line_threshold: int) -> [str, None]:
-    """
-    The java source file to process and check the line length for.
-    :param path: The base path
-    :param filename: The java file name
-    :param desired_size: The desired number of lines
-    :param line_threshold: The threshold to allow for approximate values
-    :return: The source files path if it has the number of lines within the threshold; otherwise None
-    """
-    file_path = os.path.join(path, filename)
-    if file_path == "/data/mini/srcml-2019-09/project-17094036/src-83472986.xml":
-        # Don't process extremely large file
-        return
-    
-    with open(file_path) as f:
-        file_length = len(f.readlines())
-        logging.debug(file_path + ":" + str(file_length))
-        if desired_size - line_threshold <= file_length <= desired_size + line_threshold:
-            return file_path
+desired_length = 100
+line_threshold = 5
 
 
-def process_meta(src_file: str) -> str:
+def process(path: str) -> [str, None]:
     """
-    Converts .java extension to the .json extension used in the metadata files.
-    :param src_file: The src file to convert
-    :return: The metadata file
+    Process the files to get the correct length
+    :param path: The root path to process
+    :return: A list of files that are approx the correct length
     """
-    return src_file.replace(".java", ".json")
+
+    src_path = path.replace("json", "java")
+    if src_path == "/data/minisrc/srcml-2019-09/project-17094036/src-83472986.java":
+        logging.info("Skipping extremely large file")
+        return None
+
+    with open(src_path) as src_file:
+        file_length = len(src_file.readlines())
+        logging.debug(src_path + ":" + str(file_length))
+        if desired_length - line_threshold <= file_length <= desired_length + line_threshold:
+            return path
+
+    return None
 
 
-def get_all_files(dir_to_label: str, desired_size: int, line_threshold: int) -> list:
+def get_all_files(dir_to_label: str) -> list:
     """
     Creates a list of files to facilitate random sampling
     Adapted from: https://stackoverflow.com/questions/6411811/randomly-selecting-a-file-from-a-tree-of-directories-in-a-completely-fair-manner
@@ -62,27 +57,21 @@ def get_all_files(dir_to_label: str, desired_size: int, line_threshold: int) -> 
     :return: The list of all files
     """
 
-    src_files = []
-
     pool = mp.Pool(mp.cpu_count() // MULTIPROCESS_DIVISOR)
 
+    meta_files = []
+
     for path, _, files in os.walk(dir_to_label):
-        temp_data = pool.starmap(process_src, [(path, f, desired_size, line_threshold)
-                                           for f in files if f.endswith(".java")])
-        src_files.append(temp_data)
+        meta_files = pool.map(process, [os.path.join(path, file)
+                                        for file in files if file.endswith(".json")])
 
-    src_files = list(filter(None, [s for src in src_files for s in src]))
-    src_files.sort()
-
-    meta_files = pool.map(process_meta, src_files)
-    meta_files.sort()
-
+    meta_files = list(filter(None, meta_files))
     pool.close()
 
-    return list(zip(src_files, meta_files))
+    return meta_files
 
 
-def main(dir_to_label: str, file_length: int, line_threshold: int) -> None:
+def main(dir_to_label: str) -> None:
     """
     Used for labelling the Blackbox Mini Source Dataset.
     :param dir_to_label: The directory to take a random sample from
@@ -94,7 +83,7 @@ def main(dir_to_label: str, file_length: int, line_threshold: int) -> None:
         logging.fatal("Directory is not valid")
         return
 
-    files = get_all_files(dir_to_label, file_length, line_threshold)
+    files = get_all_files(dir_to_label)
 
     if len(files) == 0:
         logging.fatal("No files found with desired length.")
@@ -102,6 +91,7 @@ def main(dir_to_label: str, file_length: int, line_threshold: int) -> None:
 
     with open("found_files_" + datetime.now().isoformat(timespec="seconds") + ".pickle", "wb") as of:
         logging.info("Saving found files... (" + str(len(files)) + ")")
+        logging.debug("Files: " + str(files))
         pickle.dump(files, of)
 
 
@@ -125,4 +115,7 @@ if __name__ == '__main__':
         if not args[1].isdigit() or not args[2].isdigit():
             logging.critical("Desired length of line threshold is not a positive integer")
         else:
-            main(dir_to_label=args[0], file_length=int(args[1]), line_threshold=int(args[2]))
+            desired_length = int(args[1])
+            line_threshold = int(args[2])
+
+            main(dir_to_label=args[0])

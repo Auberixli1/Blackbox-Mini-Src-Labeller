@@ -5,8 +5,6 @@ import random
 import sys
 import pandas as pd
 import json
-import multiprocessing as mp
-from multiprocessing_logging import install_mp_handler
 
 VERSION = 0.1
 DIVIDER = "-".join("-" for i in range(50))
@@ -16,11 +14,7 @@ logging.basicConfig(handlers=[
     logging.StreamHandler()
 ],
     level=logging.ERROR,
-    format='%(processName)s - %(asctime)s - %(message)s')
-
-MULTIPROCESS_DIVISOR = 4
-
-install_mp_handler()
+    format='%(asctime)s - %(message)s')
 
 
 def get_labels(label_name: str) -> list:
@@ -32,9 +26,9 @@ def get_labels(label_name: str) -> list:
 
     number_of_labels = input("Please enter the number of labels for " + label_name + ": ")
 
-    if not number_of_labels.isdigit():
+    while not number_of_labels.isdigit():
         logging.critical("Input is not an positive integer")
-        return get_labels(label_name)
+        number_of_labels = input("Please enter the number of labels for " + label_name + ": ")
 
     print("What labels are valid for " + label_name + "?")
 
@@ -50,9 +44,9 @@ def get_labels(label_name: str) -> list:
 def assign_label(labels: list) -> str:
     label = input("Please label the above file " + str(labels) + ": ")
 
-    if label not in labels:
+    while label not in labels:
         logging.critical("Label is not part of the existing label set")
-        return assign_label(labels)
+        label = input("Please label the above file " + str(labels) + ": ")
 
     print(DIVIDER)
     return label
