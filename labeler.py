@@ -78,14 +78,13 @@ def save_in_progress(random_files: list, output_data: pd.DataFrame, output_file:
                                                 label_name: None}])],
                                 ignore_index=True)
 
-    print(output_data)
     logging.debug("Writing to file")
     output_data.to_csv(output_file, index=False)
     logging.debug("Saved file")
 
 
-def label(files, labels, output_data, output_file, label_name):
-    for file in files:
+def label(files: list, labels: list, output_data: pd.DataFrame, output_file, label_name):
+    for file in list(files):
         print(file + "\n")
 
         with open(file) as f:
@@ -103,13 +102,15 @@ def label(files, labels, output_data, output_file, label_name):
         if new_label == "exit":
             logging.debug("Saving current state...")
             save_in_progress(files, output_data, output_file, label_name)
-            return
+            return None
 
         output_data = pd.concat([output_data,
                                  pd.DataFrame([{'file_name': file,
                                                 'source': src, 'compile_result': meta['compile_result'],
                                                 label_name: new_label}])],
                                 ignore_index=True)
+
+        files.remove(file)
 
     return output_data
 
@@ -144,6 +145,9 @@ def initial_labeller(pickle_file: str, output_file: str, sample_size: int, label
 
     output_data = label(random_files, labels, output_data, output_file, label_name)
 
+    if output_data is None:
+        return
+
     output_data.to_csv(output_file, index=False)
 
 
@@ -153,15 +157,26 @@ def continue_labelling(csv_file: str) -> None:
     :param csv_file: The CSV that has been previously partially saved
     :return: None
     """
+
+    if not os.path.exists(csv_file):
+        logging.fatal("CSV file not found")
+        return
+
     output_data = pd.read_csv(csv_file)
 
-    files = output_data['file_name'].tolist()
-
     label_name = output_data.columns[len(output_data.columns) - 1]
+    files = output_data[output_data[label_name].isna()]['file_name'].tolist()
+
+    output_data = output_data[~output_data[label_name].isna()]
 
     labels = get_labels(label_name)
 
-    label(files, labels, output_data, csv_file, label_name)
+    output_data = label(files, labels, output_data, csv_file, label_name)
+
+    if output_data is None:
+        return
+
+    output_data.to_csv(csv_file, index=False)
 
 
 if __name__ == '__main__':
