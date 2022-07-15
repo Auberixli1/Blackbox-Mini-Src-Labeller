@@ -86,14 +86,14 @@ def main(pickle_file: str, output_file: str, sample_size: int, label_name: str) 
     random_files = random.choices(files, k=sample_size)
 
     for file in random_files:
-        print(file[0] + "\n")
+        print(file + "\n")
 
-        with open(file[1]) as f:
+        with open(file) as f:
             # print meta data
             meta = json.loads(f.read())
             print(str(meta) + "\n")
 
-        with open(file[0]) as f:
+        with open(meta['src_file']) as f:
             # print source
             src = f.read()
             print(src + "\n")
