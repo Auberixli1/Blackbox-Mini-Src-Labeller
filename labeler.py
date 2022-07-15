@@ -38,18 +38,22 @@ def get_labels(label_name: str) -> list:
         labels.append(input("Enter a label: "))
 
     logging.info("Valid Labels:" + str(labels))
+
+    # Add exit to label list to allow for partial saving
+    labels.append("exit")
+
     return labels
 
 
 def assign_label(labels: list) -> str:
-    label = input("Please label the above file " + str(labels) + ": ")
+    new_label = input("Please label the above file " + str(labels) + ": ")
 
-    while label not in labels:
+    while new_label not in labels:
         logging.critical("Label is not part of the existing label set")
-        label = input("Please label the above file " + str(labels) + ": ")
+        new_label = input("Please label the above file " + str(labels) + ": ")
 
     print(DIVIDER)
-    return label
+    return new_label
 
 
 def load_files(pickle_file: str) -> list:
@@ -57,7 +61,60 @@ def load_files(pickle_file: str) -> list:
         return pickle.load(pf)
 
 
-def main(pickle_file: str, output_file: str, sample_size: int, label_name: str) -> None:
+def save_in_progress(random_files: list, output_data: pd.DataFrame, output_file: str, label_name: str) -> None:
+    """
+    Saves the in progress labelling to a CSV.
+    :param random_files: The random sample of files to label
+    :param output_data: The output dataframe to write to a CSV
+    :param output_file: The path to save the partially labelled CSV
+    :param label_name: The name of the label
+    :return: None
+    """
+    
+    for file in random_files:
+        output_data = pd.concat([output_data,
+                                 pd.DataFrame([{'file_name': file,
+                                                'source': None, 'compile_result': None,
+                                                label_name: None}])],
+                                ignore_index=True)
+
+    print(output_data)
+    logging.debug("Writing to file")
+    output_data.to_csv(output_file, index=False)
+    logging.debug("Saved file")
+
+
+def label(files, labels, output_data, output_file, label_name):
+    for file in files:
+        print(file + "\n")
+
+        with open(file) as f:
+            # print meta data
+            meta = json.loads(f.read())
+            print(str(meta) + "\n")
+
+        with open(meta['src_file']) as f:
+            # print source
+            src = f.read()
+            print(src + "\n")
+
+        new_label = assign_label(labels)
+
+        if new_label == "exit":
+            logging.debug("Saving current state...")
+            save_in_progress(files, output_data, output_file, label_name)
+            return
+
+        output_data = pd.concat([output_data,
+                                 pd.DataFrame([{'file_name': file,
+                                                'source': src, 'compile_result': meta['compile_result'],
+                                                label_name: new_label}])],
+                                ignore_index=True)
+
+    return output_data
+
+
+def initial_labeller(pickle_file: str, output_file: str, sample_size: int, label_name: str) -> None:
     """
     Used for labelling the Blackbox Mini Source Dataset.
     :param pickle_file: The pickle file to read
@@ -85,28 +142,26 @@ def main(pickle_file: str, output_file: str, sample_size: int, label_name: str) 
 
     random_files = random.choices(files, k=sample_size)
 
-    for file in random_files:
-        print(file + "\n")
+    output_data = label(random_files, labels, output_data, output_file, label_name)
 
-        with open(file) as f:
-            # print meta data
-            meta = json.loads(f.read())
-            print(str(meta) + "\n")
+    output_data.to_csv(output_file, index=False)
 
-        with open(meta['src_file']) as f:
-            # print source
-            src = f.read()
-            print(src + "\n")
 
-        label = assign_label(labels)
+def continue_labelling(csv_file: str) -> None:
+    """
+    Continue labelling from the point that was last left off.
+    :param csv_file: The CSV that has been previously partially saved
+    :return: None
+    """
+    output_data = pd.read_csv(csv_file)
 
-        output_data = pd.concat([output_data,
-                                 pd.DataFrame([{'file_name': file,
-                                                'source': src, 'compile_result': meta['compile_result'],
-                                                label_name: label}])],
-                                ignore_index=True)
+    files = output_data['file_name'].tolist()
 
-    output_data.to_csv(output_file)
+    label_name = output_data.columns[len(output_data.columns) - 1]
+
+    labels = get_labels(label_name)
+
+    label(files, labels, output_data, csv_file, label_name)
 
 
 if __name__ == '__main__':
@@ -120,13 +175,20 @@ if __name__ == '__main__':
     if "--version" in opts:
         print(VERSION)
 
-    if len(args) != 4:
-        logging.critical("Please add the directory to label and the file to save the labels to")
-        logging.critical("python3 labeler.py /data/minisrc /home/mmesser/readability_labels.csv 100 readable")
-        logging.critical("Use -v to enable logging")
-        logging.critical("Not enough arguments to start process")
-    else:
+
+    if len(args) == 4:
         if not args[2].isdigit():
             logging.critical("Sample size is not a positive integer")
         else:
-            main(pickle_file=args[0], output_file=args[1], sample_size=int(args[2]), label_name=args[3])
+            initial_labeller(pickle_file=args[0], output_file=args[1], sample_size=int(args[2]), label_name=args[3])
+    elif len(args) == 1:
+        if not args[0].endswith(".csv"):
+            logging.critical("CSV not supplied")
+        else:
+            continue_labelling(csv_file=args[0])
+    else:
+        logging.critical("Please use the following format to start labelling "
+                         "`python3 labeler.py <raw_data_root_dir> <csv_output> <sample_size> <label_name>'")
+        logging.critical("Or use the following format to continue labelling `python3 labeler.py <csv_file>'")
+        logging.critical("Use -v to enable logging")
+        logging.critical("Not enough arguments to start process")
