@@ -62,8 +62,12 @@ def get_all_files(dir_to_label: str) -> list:
     meta_files = []
 
     for path, _, files in os.walk(dir_to_label):
-        meta_files = pool.map(process, [os.path.join(path, file)
+        temp = pool.map(process, [os.path.join(path, file)
                                         for file in files if file.endswith(".json")])
+
+        meta_files.extend(list(filter(None, temp)))
+
+        logging.info("Found files: " + str(meta_files))
 
     meta_files = list(filter(None, meta_files))
     pool.close()
